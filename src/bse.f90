@@ -235,6 +235,44 @@ subroutine build_amb_apb_diag_auxil(nmat,nstate,energy,wpol,m_apb,n_apb,amb_matr
 end subroutine build_amb_apb_diag_auxil
 
 
+
+!=========================================================================
+subroutine get_IP_energies(nmat,nstate,energy,wpol,transition_energies)
+ use m_definitions
+ use m_timing
+ use m_warning
+ use m_memory
+ use m_mpi
+ use m_inputparam
+ use m_spectral_function
+ use m_eri_ao_mo
+ implicit none
+
+ integer,intent(in)                 :: nmat,nstate
+ real(dp),intent(in)                :: energy(nstate,nspin)
+ type(spectral_function),intent(in) :: wpol
+ real(dp),intent(out)               :: transition_energies(nmat)
+!=====
+ integer              :: t_jb_global
+ integer              :: jstate,bstate
+ integer              :: jbspin
+!=====
+
+ write(stdout,'(a)') ' Transition Energies'
+
+ do t_jb_global=1,nmat
+
+   jstate = wpol%transition_table(1,t_jb_global)
+   bstate = wpol%transition_table(2,t_jb_global)
+   jbspin = wpol%transition_table(3,t_jb_global)
+   transition_energies(t_jb_global) = energy(bstate,jbspin) - energy(jstate,jbspin)
+
+ enddo
+
+
+end subroutine get_ip_energies
+
+
 !=========================================================================
 subroutine get_rpa_correlation(nmat,m_apb,n_apb,amb_matrix,apb_matrix,rpa_correlation)
  use m_definitions

@@ -50,7 +50,7 @@ subroutine optical_spectrum(basis,occupation,c_matrix,chi,xpy_matrix,xmy_matrix,
   integer                            :: iomega,idir,jdir
   integer,parameter                  :: nomega=2400
   complex(dp)                        :: omega(nomega)
-  real(dp)                           :: coeff(2*chi%npole_reso),trace
+  real(dp)                           :: coeff(2*chi%npole_reso),trace,min_eigen
   real(dp)                           :: dynamical_pol(nomega,3,3),photoabsorp_cross(nomega,3,3)
   real(dp)                           :: static_polarizability(3,3)
   real(dp)                           :: oscillator_strength,trk_sumrule,mean_excitation
@@ -73,11 +73,18 @@ subroutine optical_spectrum(basis,occupation,c_matrix,chi,xpy_matrix,xmy_matrix,
 
   gt = get_gaussian_type_tag(basis%gaussian_type)
   nstate = SIZE(c_matrix,DIM=2)
-  m_x = SIZE(xpy_matrix,DIM=1)
-  n_x = SIZE(xpy_matrix,DIM=2)
 
   nexc = nexcitation
   if( nexc == 0 ) nexc = chi%npole_reso
+ 
+  min_eigen=minval(ABS(eigenvalue(1:nexc)))*Ha_eV
+
+  if (size(xpy_matrix)>1) then
+    m_x = SIZE(xpy_matrix,DIM=1)
+    n_x = SIZE(xpy_matrix,DIM=2)
+  else
+    m_x = nexc
+  endif
 
   !
   ! First precalculate all the needed dipole in the basis set
@@ -107,6 +114,8 @@ subroutine optical_spectrum(basis,occupation,c_matrix,chi,xpy_matrix,xmy_matrix,
     astate = chi%transition_table(2,t_ia_global)
     iaspin = chi%transition_table(3,t_ia_global)
 
+    if (size(xpy_matrix)>1) then
+
     ! Let use (i <-> j) symmetry to halve the loop
     do t_jb=1,n_x
       t_jb_global = colindex_local_to_global(ipcol_sd,npcol_sd,t_jb)
@@ -116,6 +125,11 @@ subroutine optical_spectrum(basis,occupation,c_matrix,chi,xpy_matrix,xmy_matrix,
                      + dipole_mo(istate,astate,iaspin,:) * xpy_matrix(t_ia,t_jb) * SQRT(spin_fact)
       endif
     enddo
+
+    else
+      residue(:,t_ia_global) = residue(:,t_ia_global) &
+                   + dipole_mo(istate,astate,iaspin,:) * SQRT(spin_fact)
+    endif
 
   enddo
   call world%sum(residue)
@@ -160,7 +174,7 @@ subroutine optical_spectrum(basis,occupation,c_matrix,chi,xpy_matrix,xmy_matrix,
       write(unit_yaml,'(12x,a6,a,1x,es18.8)') ADJUSTL(char6),':',oscillator_strength
     endif
 
-    if(t_jb_global<=30) then
+    if(eigenvalue(t_jb_global)*HA_eV<min_eigen+5._dp ) then
 
       if( is_triplet ) then
         symsymbol='3'
@@ -168,9 +182,9 @@ subroutine optical_spectrum(basis,occupation,c_matrix,chi,xpy_matrix,xmy_matrix,
         symsymbol='1'
       endif
 
+      if (size(xpy_matrix)>1) then
       !
       ! Test the parity in case of molecule with inversion symmetry
-
       t_ia_global = 0
       do t_ia=1,m_x
         ! t_jb is zero if the proc is not in charge of this process
@@ -183,6 +197,9 @@ subroutine optical_spectrum(basis,occupation,c_matrix,chi,xpy_matrix,xmy_matrix,
       enddo
       call world%max(t_ia_global)
       if( t_ia_global == 0 ) cycle
+      else
+         t_ia_global=t_jb_global
+      endif
 
       istate = chi%transition_table(1,t_ia_global)
       astate = chi%transition_table(2,t_ia_global)
@@ -211,6 +228,7 @@ subroutine optical_spectrum(basis,occupation,c_matrix,chi,xpy_matrix,xmy_matrix,
       write(stdout,'(1x,a,1x,i4.4,a3,2(f18.8,2x),5x,a32)') 'Exc.',t_jb_global,' : ', &
                    eigenvalue(t_jb_global)*Ha_eV,oscillator_strength,symsymbol
 
+      if (size(xpy_matrix)>1) then
       !
       ! Output the transition coefficients
       coeff(:) = 0.0_dp
@@ -238,6 +256,12 @@ subroutine optical_spectrum(basis,occupation,c_matrix,chi,xpy_matrix,xmy_matrix,
         if( ABS(coeff(chi%npole_reso+t_ia_global)) > 0.1_dp )  &
           write(stdout,'(8x,i4,a,i4,1x,f12.5)') istate,' <- ',astate,coeff(chi%npole_reso+t_ia_global)
       enddo
+
+      else
+          istate = chi%transition_table(1,t_jb_global)
+          astate = chi%transition_table(2,t_jb_global)
+          write(stdout,'(8x,i4,a,i4,1x,f12.5)') istate,' -> ',astate
+      endif
 
       write(stdout,*)
 

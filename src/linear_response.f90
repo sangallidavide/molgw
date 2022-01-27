@@ -61,9 +61,6 @@ subroutine polarizability(enforce_rpa,calculate_w,basis,nstate,occupation,energy
    write(stdout,'(a)') ' Singlet final state'
  endif
 
- if( has_auxil_basis ) &
-   call calculate_eri_3center_eigen(c_matrix,ncore_W+1,nvirtual_W-1,ncore_W+1,nvirtual_W-1,timing=timing_aomo_pola)
-
  ! Set up all the switches to be able to treat
  ! GW, BSE, TDHF, TDDFT (semilocal or hybrid)
 
@@ -72,6 +69,15 @@ subroutine polarizability(enforce_rpa,calculate_w,basis,nstate,occupation,energy
  is_tddft = calc_type%is_td .AND. calc_type%is_dft .AND. .NOT. enforce_rpa
  is_bse   = calc_type%is_bse .AND. .NOT. enforce_rpa
  is_bse_ip = calc_type%is_bse .AND. calc_type%no_hartree_kernel .AND. .NOT. enforce_rpa
+
+ if(is_bse_ip) then
+   call polarizability_IP(enforce_rpa,calculate_w,basis,nstate,occupation,energy,c_matrix,en_rpa,en_gw,wpol_out)
+   call stop_clock(timing_pola)
+   return
+ endif
+
+ if( has_auxil_basis ) &
+   call calculate_eri_3center_eigen(c_matrix,ncore_W+1,nvirtual_W-1,ncore_W+1,nvirtual_W-1,timing=timing_aomo_pola)
  !
  ! Set up exchange content alpha_local
  ! manual_tdhf can override anything
@@ -160,16 +166,13 @@ subroutine polarizability(enforce_rpa,calculate_w,basis,nstate,occupation,energy
    ! Step 1
    call build_amb_apb_diag_auxil(nmat,nstate,energy_qp,wpol_out,m_apb,n_apb,amb_matrix,apb_matrix,amb_diag_rpa)
 
-   if(.NOT.is_bse_ip)  then
 #if defined(HAVE_SCALAPACK)
-     call build_apb_hartree_auxil_scalapack(desc_apb,wpol_out,m_apb,n_apb,apb_matrix)
+   call build_apb_hartree_auxil_scalapack(desc_apb,wpol_out,m_apb,n_apb,apb_matrix)
 #else
-     call build_apb_hartree_auxil(desc_apb,wpol_out,m_apb,n_apb,apb_matrix)
+   call build_apb_hartree_auxil(desc_apb,wpol_out,m_apb,n_apb,apb_matrix)
 #endif
 
-     call get_rpa_correlation(nmat,m_apb,n_apb,amb_matrix,apb_matrix,en_rpa)
-   endif
-
+   call get_rpa_correlation(nmat,m_apb,n_apb,amb_matrix,apb_matrix,en_rpa)
 
    !
    ! Step 2
@@ -344,6 +347,101 @@ subroutine polarizability(enforce_rpa,calculate_w,basis,nstate,occupation,energy
 
 end subroutine polarizability
 
+
+subroutine polarizability_IP(enforce_rpa,calculate_w,basis,nstate,occupation,energy,c_matrix,en_rpa,en_gw,wpol_out)
+ use m_definitions
+ use m_timing
+ use m_warning
+ use m_memory
+ use m_inputparam
+ use m_mpi
+ use m_scalapack
+ use m_cart_to_pure
+ use m_block_diago
+ use m_basis_set
+ use m_spectral_function
+ use m_eri_ao_mo
+ use m_spectra
+ implicit none
+
+ logical,intent(in)                    :: enforce_rpa,calculate_w
+ type(basis_set),intent(in)            :: basis
+ integer,intent(in)                    :: nstate
+ real(dp),intent(in)                   :: occupation(nstate,nspin)
+ real(dp),intent(in)                   :: energy(nstate,nspin),c_matrix(basis%nbf,nstate,nspin)
+ real(dp),intent(out)                  :: en_rpa,en_gw
+ type(spectral_function),intent(inout) :: wpol_out
+!=====
+ type(spectral_function)   :: wpol_static
+ logical                   :: is_bse
+ logical                   :: is_bse_ip
+ integer                   :: nmat,nexc
+ real(dp)                  :: alpha_local
+ real(dp),allocatable      :: amb_diag_rpa(:)
+ real(dp),allocatable      :: amb_matrix(:,:),apb_matrix(:,:)
+ real(dp),allocatable      :: xpy_matrix(:,:),xmy_matrix(:,:)
+ real(dp),allocatable      :: eigenvalue(:)
+ real(dp)                  :: energy_qp(nstate,nspin)
+ logical                   :: is_tddft,is_rpa
+ logical                   :: has_manual_tdhf
+ integer                   :: reading_status
+ integer                   :: tdhffile
+ integer                   :: m_apb,n_apb,m_x,n_x
+! SCALAPACK variables
+ integer                   :: desc_apb(NDEL),desc_x(NDEL)
+ integer                   :: info
+!=====
+
+ write(stdout,'(/,a)') ' Calculating the IP polarizability'
+ 
+ is_bse   = calc_type%is_bse .AND. .NOT. enforce_rpa
+ !
+ ! Prepare the QP energies
+ !
+ if( is_bse ) then
+   ! Get energy_qp
+   call get_energy_qp(nstate,energy,occupation,energy_qp)
+ else
+   ! For any other type of calculation, just fill energy_qp array with energy
+   energy_qp(:,:) = energy(:,:)
+ endif
+
+ !
+ ! Prepare the big matrices (A+B) and (A-B)
+ !
+ nmat = wpol_out%npole_reso
+ !
+ allocate(eigenvalue(nmat))
+ allocate(xpy_matrix(1,1))
+ allocate(xmy_matrix(1,1))
+ !
+ 
+ call get_IP_energies(nmat,nstate,energy_qp,wpol_out,eigenvalue)
+ 
+
+ write(stdout,'(/,a,f12.6)') ' Lowest neutral excitation energy (eV):',MINVAL(ABS(eigenvalue))*Ha_eV
+
+ !
+ ! Calculate the optical sprectrum
+ ! and the dynamic dipole tensor
+ !
+ if( calc_type%is_td .OR. is_bse ) then
+   call optical_spectrum(basis,occupation,c_matrix,wpol_out,xpy_matrix,xmy_matrix,eigenvalue)
+   select case(TRIM(lower(stopping)))
+   case('spherical')
+     call stopping_power(basis,c_matrix,wpol_out,xpy_matrix,eigenvalue)
+   case('3d')
+     call stopping_power_3d(basis,c_matrix,wpol_out,xpy_matrix,desc_x,eigenvalue)
+   end select
+ endif
+
+ if( print_w_ ) call write_spectral_function(wpol_out)
+
+ deallocate(eigenvalue)
+ deallocate(xpy_matrix)
+ deallocate(xmy_matrix)
+
+end subroutine polarizability_IP
 
 !=========================================================================
 subroutine polarizability_onering(basis,nstate,energy,c_matrix,vchi0v)
