@@ -132,7 +132,7 @@ subroutine optical_spectrum(basis,occupation,c_matrix,chi,xpy_matrix,xmy_matrix,
     endif
 
   enddo
-  call world%sum(residue)
+  if(size(xpy_matrix)>1) call world%sum(residue)
 
   deallocate(dipole_mo)
 
