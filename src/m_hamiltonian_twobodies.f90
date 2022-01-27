@@ -324,7 +324,8 @@ subroutine setup_hartree_ri(p_matrix,hartree_ao,ehartree)
      lbf = index_basis(2,ipair)
      ! As all pairs contribute twice for (k,l) and (l,k) and as P is hermitian,
      ! only the real part survives
-     pmat(ipair) = SUM(p_matrix(kbf,lbf,:)%re) * 2.0_dp
+!!!     pmat(ipair) = SUM(p_matrix(kbf,lbf,:)%re) * 2.0_dp
+     pmat(ipair) = SUM(real(p_matrix(kbf,lbf,:),kind=dp)) * 2.0_dp
    enddo
  end select
 
@@ -428,7 +429,8 @@ subroutine calculate_density_auxilbasis(p_matrix,rho_coeff)
        lbf = index_basis(2,ipair)
        ! As all pairs contribute twice for (k,l) and (l,k) and as P is hermitian,
        ! only the real part survives
-       pmat(ipair) = p_matrix(kbf,lbf,ispin)%re * 2.0_dp
+!!!       pmat(ipair) = p_matrix(kbf,lbf,ispin)%re * 2.0_dp
+       pmat(ipair) = real(p_matrix(kbf,lbf,ispin),kind=dp) * 2.0_dp
      enddo
    end select
 

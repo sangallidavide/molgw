@@ -32,6 +32,7 @@ subroutine polarizability(enforce_rpa,calculate_w,basis,nstate,occupation,energy
 !=====
  type(spectral_function)   :: wpol_static
  logical                   :: is_bse
+ logical                   :: is_bse_ip
  integer                   :: nmat,nexc
  real(dp)                  :: alpha_local
  real(dp),allocatable      :: amb_diag_rpa(:)
@@ -70,7 +71,7 @@ subroutine polarizability(enforce_rpa,calculate_w,basis,nstate,occupation,energy
  ! Set up flag is_tddft and is_bse
  is_tddft = calc_type%is_td .AND. calc_type%is_dft .AND. .NOT. enforce_rpa
  is_bse   = calc_type%is_bse .AND. .NOT. enforce_rpa
-
+ is_bse_ip = calc_type%is_bse .AND. calc_type%no_hartree_kernel .AND. .NOT. enforce_rpa
  !
  ! Set up exchange content alpha_local
  ! manual_tdhf can override anything
@@ -159,14 +160,15 @@ subroutine polarizability(enforce_rpa,calculate_w,basis,nstate,occupation,energy
    ! Step 1
    call build_amb_apb_diag_auxil(nmat,nstate,energy_qp,wpol_out,m_apb,n_apb,amb_matrix,apb_matrix,amb_diag_rpa)
 
+   if(.NOT.is_bse_ip)  then
 #if defined(HAVE_SCALAPACK)
-   call build_apb_hartree_auxil_scalapack(desc_apb,wpol_out,m_apb,n_apb,apb_matrix)
+     call build_apb_hartree_auxil_scalapack(desc_apb,wpol_out,m_apb,n_apb,apb_matrix)
 #else
-   call build_apb_hartree_auxil(desc_apb,wpol_out,m_apb,n_apb,apb_matrix)
+     call build_apb_hartree_auxil(desc_apb,wpol_out,m_apb,n_apb,apb_matrix)
 #endif
 
-   call get_rpa_correlation(nmat,m_apb,n_apb,amb_matrix,apb_matrix,en_rpa)
-
+     call get_rpa_correlation(nmat,m_apb,n_apb,amb_matrix,apb_matrix,en_rpa)
+   endif
 
 
    !

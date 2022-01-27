@@ -48,7 +48,7 @@ subroutine optical_spectrum(basis,occupation,c_matrix,chi,xpy_matrix,xmy_matrix,
   integer                            :: istate,astate,iaspin
   integer                            :: mpspin
   integer                            :: iomega,idir,jdir
-  integer,parameter                  :: nomega=600
+  integer,parameter                  :: nomega=2400
   complex(dp)                        :: omega(nomega)
   real(dp)                           :: coeff(2*chi%npole_reso),trace
   real(dp)                           :: dynamical_pol(nomega,3,3),photoabsorp_cross(nomega,3,3)

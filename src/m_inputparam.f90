@@ -74,6 +74,7 @@ module m_inputparam
     logical            :: is_selfenergy
     logical            :: is_ci
     logical            :: is_bse,no_bse_kernel,is_td
+    logical            :: no_hartree_kernel
     integer            :: selfenergy_technique      ! perturbative or quasiparticle self-consistent or eigenvalue-sc
     integer            :: selfenergy_approx         ! GW, COHSEX, PT2
   end type calculation_type
@@ -183,6 +184,7 @@ subroutine init_calculation_type(scf,postscf)
   calc_type%is_ci                = .FALSE.
   calc_type%is_bse               = .FALSE.
   calc_type%no_bse_kernel        = .FALSE.
+  calc_type%no_hartree_kernel    = .FALSE.
   calc_type%is_td                = .FALSE.
   calc_type%is_real_time         = .FALSE.
   calc_type%selfenergy_technique = one_shot
@@ -281,6 +283,10 @@ subroutine init_calculation_type(scf,postscf)
     case('BSE_RPA','BSE-RPA')
       calc_type%is_bse        = .TRUE.
       calc_type%no_bse_kernel = .TRUE.
+    case('BSE_IP','BSE-IP')
+      calc_type%is_bse        = .TRUE.
+      calc_type%no_bse_kernel = .TRUE.
+      calc_type%no_hartree_kernel = .TRUE.
     case('TD')
       calc_type%is_td = .TRUE.
     case('REAL_TIME')

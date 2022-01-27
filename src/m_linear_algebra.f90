@@ -233,7 +233,8 @@ subroutine invert_inplace_cdp(matrix)
   lwork = -1
   call ZGETRI(nmat,matrix,nmat,ipiv,work,lwork,info)
   if(info/=0) call die('FAILURE in ZGETRI query call')
-  lwork = NINT(work(1)%re)
+!!!  lwork = NINT(work(1)%re)
+     lwork = NINT(real(work(1),kind=dp))
   deallocate(work)
 
   allocate(work(lwork))

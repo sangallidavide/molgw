@@ -58,7 +58,8 @@ subroutine static_dipole(basis,occupation,c_matrix_in,p_matrix_in,dipole_ao_in,d
   if( .NOT. PRESENT(p_matrix_in) ) then
     call setup_density_matrix(c_matrix_in,occupation,p_matrix)
   else
-    p_matrix(:,:,:) = p_matrix_in(:,:,:)%re
+!!!    p_matrix(:,:,:) = p_matrix_in(:,:,:)%re
+    p_matrix(:,:,:) = real(p_matrix_in(:,:,:),kind=dp)
   endif
 
 
